@@ -1,0 +1,264 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model AppConfiguration {
+  id                      String   @id @default(cuid())
+  shop                    String   @unique
+  businessStart           String   @default("09:00")
+  businessEnd             String   @default("17:00")
+  emailAlertsEnabled      Boolean  @default(true)
+  alertEmailAddress       String?
+  strictInventory         Boolean  @default(false)
+  requireReason           Boolean  @default(true)
+  requireDetailedReason   Boolean  @default(false)
+  requireInboundReference Boolean  @default(false)
+  staffNames              String   @default("[]")
+  adjustmentReasons       String   @default("[\"Damaged Item\",\"Cycle Count Correction\",\"Customer Return\",\"New Inventory Received\"]")
+  alertOnReasons          String   @default("[]")
+  highValueItems          String   @default("[]")
+  serialNumberRequiredItems String @default("[]")
+  requireSkuScanAll       Boolean  @default(false)
+  skuRequiredItems        String   @default("[]")
+  // Advanced Freezes
+  maxAdjustmentMagnitude  Int?     
+  frozenLocations         String   @default("[]")
+  receiveOnlyStaff        String   @default("[]")
+  hardFreezeOutsideHours  Boolean  @default(false)
+  staffLocationConstraints String  @default("{}")
+  // Private Evidence Mode — when true, emails don't include file links
+  privateEvidenceMode     Boolean  @default(false)
+  // ONIT Financial Vision AI — API key unlocks Google Drive and future OCR integrations
+  onitVisionApiKey        String?
+  // Google Drive OAuth (gated behind valid ONIT Vision API Key)
+  evidenceStorage         String   @default("email")
+  googleDriveEnabled      Boolean  @default(false)
+  googleDriveFolderId     String?
+  googleDriveAccessToken  String?
+  googleDriveRefreshToken String?
+  googleDriveTokenExpiry  DateTime?
+  googleDriveEmail        String?
+  planType                String   @default("basic")
+  
+  // Manager Overrides
+  masterOverridePin       String?
+  delegatedManagerPins    String   @default("{}")
+
+  // Company Branding (for Purchase Orders)
+  companyLogo             String?
+  companyName             String?
+  companyAddress          String?
+  companyPhone            String?
+  companyEmail            String?
+
+  // PO Authorization Controls
+  poViewStaff             String   @default("[]")  // Staff who can see POs
+  poAuthorizedStaff       String   @default("[]")  // Staff who can create draft POs
+  poRequireApproval       Boolean  @default(true)   // Require manager PIN to send
+  poAutoCreateOnLowStock  Boolean  @default(false)  // Auto-create draft POs on low stock
+  poAlertEmails           String?  // Comma-separated emails for PO draft notifications
+
+  // Odoo ERP Integration
+  odooEnabled             Boolean  @default(false)
+  odooUrl                 String?  // "https://mycompany.odoo.com"
+  odooDatabase            String?  // "mycompany_prod"
+  odooApiKey              String?  // Odoo API key
+  odooUserId              Int?
+
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model SecurityRule {
+  id                String           @id @default(cuid())
+  shop              String
+  name              String
+  description       String
+  isActive          Boolean          @default(true)
+  triggerType       String
+  timeOpen          String?
+  timeClose         String?
+  quantityThreshold String?
+  haltFulfillment   Boolean          @default(false)
+  targetProductIds  String?          // JSON array of inventory item IDs to monitor (null = all products)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  alerts            TriggeredAlert[]
+}
+
+model TriggeredAlert {
+  id            String       @id @default(cuid())
+  shop          String
+  time          DateTime     @default(now())
+  ruleId        String
+  person        String
+  productName   String
+  details       String
+  status        String       @default("active")
+  transactionId String?
+  rule          SecurityRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+}
+
+model InventoryEvent {
+  id                        String   @id @default(cuid())
+  shop                      String
+  time                      DateTime @default(now())
+  inventoryItemId           String
+  available                 Int
+  reason                    String?
+  transactionId             String?
+  isProtected               Boolean  @default(false)
+  isFullyMet                Boolean?
+  proofImage                String?
+  referenceNumber           String?
+  shopifyAdjustmentGroupId  String?
+}
+
+model OrderReceipt {
+  id              String   @id @default(cuid())
+  shop            String
+  time            DateTime @default(now())
+  inventoryItemId String
+  quantity        Int
+  orderId         String
+}
+
+model DemandForecast {
+  id                String   @id @default(cuid())
+  shop              String
+  inventoryItemId   String
+  productName       String
+  sku               String?
+
+  // Calculated metrics
+  avgDailySales     Float    @default(0)
+  trendDirection    String   @default("stable") // "rising", "stable", "declining"
+  trendRate         Float    @default(0) // % change per week
+  seasonalityIndex  Float    @default(1.0)
+
+  // Forecast outputs
+  forecast30d       Int      @default(0)
+  forecast60d       Int      @default(0)
+  forecast90d       Int      @default(0)
+
+  // Stock health
+  currentStock      Int      @default(0)
+  daysUntilStockout Float?
+  reorderPoint      Int?
+  suggestedQty      Int?
+
+  calculatedAt      DateTime @default(now())
+
+  @@unique([shop, inventoryItemId])
+}
+
+model ReorderConfig {
+  id              String   @id @default(cuid())
+  shop            String
+  inventoryItemId String   @default("__GLOBAL__") // "__GLOBAL__" = global default
+  leadTimeDays    Int      @default(14)
+  safetyStockDays Int      @default(7)
+  minOrderQty     Int?     // Minimum units to order when triggered
+  useManualMinimum Boolean @default(false)
+  manualMinimum   Int?
+
+  @@unique([shop, inventoryItemId])
+}
+
+model Supplier {
+  id            String    @id @default(cuid())
+  shop          String
+  name          String
+  contactName   String?
+  email         String?
+  phone         String?
+  address       String?
+  leadTimeDays  Int       @default(14)
+  notes         String?
+  odooPartnerId Int?      // Cached Odoo res.partner ID
+  purchaseOrders PurchaseOrder[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([shop, name])
+}
+
+model PurchaseOrder {
+  id              String    @id @default(cuid())
+  shop            String
+  poNumber        String
+  supplierId      String
+  supplier        Supplier  @relation(fields: [supplierId], references: [id])
+  status          String    @default("draft")
+  expectedDate    DateTime?
+  notes           String?
+  totalCost       Float     @default(0)
+  totalUnits      Int       @default(0)
+  receivedUnits   Int       @default(0)
+  lineItems       PurchaseOrderLineItem[]
+  createdBy       String
+  approvedBy      String?   // Manager who approved
+  approvedAt      DateTime?
+  odooPOId        Int?      // Odoo purchase.order ID after sync
+  odooSyncStatus  String?   // "pending", "synced", "error"
+  odooSyncError   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([shop, poNumber])
+}
+
+model PurchaseOrderLineItem {
+  id                String   @id @default(cuid())
+  purchaseOrderId   String
+  purchaseOrder     PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  inventoryItemId   String
+  productName       String
+  sku               String?
+  orderedQty        Int
+  receivedQty       Int      @default(0)
+  unitCost          Float    @default(0)
+  receivedBy        String?
+  receivedAt        DateTime?
+  inventoryEventId  String?
+  odooProductId     Int?      // Cached Odoo product.product ID
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  shop        String
+  name        String    // "QuickBooks Integration", "Supplier Portal"
+  key         String    @unique // "onit_sk_" + 32-char random
+  scope       String    @default("read") // "read" | "write" | "admin"
+  isActive    Boolean   @default(true)
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  createdBy   String    // Staff name who generated the key
+
+  @@index([shop])
+}

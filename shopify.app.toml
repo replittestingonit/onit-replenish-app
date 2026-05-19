@@ -1,0 +1,48 @@
+# This file stores configurations for your Shopify app.
+
+client_id = "2dc906f31136d1efce7af37448054813"
+name = "Protection and Security"
+application_url = "https://protection.onitnetworking.com"
+embedded = true
+
+[auth]
+redirect_urls = ["https://protection.onitnetworking.com/auth/callback", "https://protection.onitnetworking.com/auth/shopify/callback", "https://protection.onitnetworking.com/api/auth/callback"]
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "write_products,read_inventory,read_locations,read_orders,read_fulfillments,write_fulfillments"
+
+[webhooks]
+api_version = "2024-10"
+
+  # Handled by: /app/routes/webhooks.app.uninstalled.tsx
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = ["app/uninstalled"]
+
+  # Handled by: /app/routes/webhooks.app.scopes_update.tsx
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+  [[webhooks.subscriptions]]
+  topics = [ "inventory_levels/update" ]
+  uri = "/webhooks/inventory"
+
+  # Temporarily disabled - requires protected customer data approval
+  # [[webhooks.subscriptions]]
+  # topics = [ "orders/create" ]
+  # uri = "/webhooks/orders"
+
+  # Webhooks can have filters
+  # Only receive webhooks for product updates with a product price >= 10.00
+  # See: https://shopify.dev/docs/apps/build/webhooks/customize/filters
+  # [[webhooks.subscriptions]]
+  # topics = ["products/update"]
+  # uri = "/webhooks/products/update"
+  # filter = "variants.price:>=10.00"
+
+[webhooks.privacy_compliance]
+customer_deletion_url = "https://protection.onitnetworking.com/webhooks/customers/redact"
+customer_data_request_url = "https://protection.onitnetworking.com/webhooks/customers/data_request"
+shop_deletion_url = "https://protection.onitnetworking.com/webhooks/shop/redact"
